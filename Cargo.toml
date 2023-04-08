@@ -1,8 +1,12 @@
 [package]
 name = "ordered-hashmap"
-version = "0.1.0"
+version = "0.0.1"
+authors = ["Ameer Hamza <r3alst@gmail.com>"]
+categories = ["hashmap", "dsa"]
+description = "Ordered Hashmap implementation to overcome arbitrary order of key-values problem in Rust"
+keywords = ["ordered hashmap", "linked hashmap", "hashmap", "insertion ordered hashmap"]
+license = "Apache-2.0"
+repository = "https://github.com/r3alst/ordered-hashmap"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
