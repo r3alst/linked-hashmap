@@ -4,8 +4,8 @@ use std::collections::hash_map::Entry as StdEntry;
 
 /// A custom `OrderedHashMap` struct that maintains the order of keys.
 /// It wraps a `Vec` to store keys and a `HashMap` to store key-value pairs.
-#[derive(Clone, Debug)]
-pub struct OrderedHashMap<K, V> {
+#[derive(Clone, Debug, PartialEq)]
+pub struct OrderedHashMap<K: Eq +  Hash + Clone, V> {
   pub keys: Vec<K>,
   pub map: HashMap<K, V>,
 }
