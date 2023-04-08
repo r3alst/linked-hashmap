@@ -233,6 +233,54 @@ impl<K: Eq + Hash + Clone, V> OrderedHashMap<K, V> {
       }
     }).collect::<Vec<_>>()
   }
+
+  /// Adds all key-value pairs from another `OrderedHashMap` to this one, without replacing any existing pairs.
+  ///
+  /// # Examples
+  ///
+  /// ```
+  /// use ordered_hashmap::OrderedHashMap;
+  ///
+  /// let mut map1 = OrderedHashMap::new();
+  /// map1.insert(1, "one");
+  ///
+  /// let mut map2 = OrderedHashMap::new();
+  /// map2.insert(2, "two");
+  ///
+  /// map1.extend(map2);
+  ///
+  /// assert_eq!(map1.get(&1), Some(&"one"));
+  /// assert_eq!(map1.get(&2), Some(&"two"));
+  /// ```
+  pub fn extend(&mut self, slice: OrderedHashMap<K, V>) {
+    slice.keys.into_iter().for_each(|k| {
+      if !self.keys.contains(&k) {
+        self.keys.push(k);
+      }
+    });
+    self.map.extend(slice.map);
+  }
+
+
+  /// Returns the number of key-value pairs in the map.
+  ///
+  /// # Examples
+  ///
+  /// ```
+  /// use ordered_hashmap::OrderedHashMap;
+  ///
+  /// let mut map = OrderedHashMap::new();
+  /// assert_eq!(map.len(), 0);
+  ///
+  /// map.insert(1, "one");
+  /// assert_eq!(map.len(), 1);
+  ///
+  /// map.insert(2, "two");
+  /// assert_eq!(map.len(), 2);
+  /// ```
+  pub fn len(&self) -> usize {
+    self.map.len()
+  }
 }
 
 pub enum Entry<'a, K: 'a, V: 'a> {

@@ -76,4 +76,38 @@ mod tests {
     assert_eq!(iterator.next(), Some(("key2".to_string(), 24)));
     assert_eq!(iterator.next(), None);
   }
+
+  #[test]
+  fn test_extend() {
+    let mut map1 = OrderedHashMap::new();
+    map1.insert(1, "one");
+    map1.insert(2, "two");
+
+    let mut map2 = OrderedHashMap::new();
+    map2.insert(2, "TWO");
+    map2.insert(3, "three");
+
+    map1.extend(map2);
+
+    assert_eq!(map1.len(), 3);
+    assert_eq!(map1.get(&1), Some(&"one"));
+    assert_eq!(map1.get(&2), Some(&"TWO"));
+    assert_eq!(map1.get(&3), Some(&"three"));
+  }
+
+  #[test]
+  fn test_len() {
+    let mut map = OrderedHashMap::new();
+
+    assert_eq!(map.len(), 0);
+
+    map.insert(1, "one");
+    assert_eq!(map.len(), 1);
+
+    map.insert(2, "two");
+    assert_eq!(map.len(), 2);
+
+    map.insert(3, "three");
+    assert_eq!(map.len(), 3);
+  }
 }
