@@ -1,5 +1,5 @@
 [package]
-name = "ordered-hashmap"
+name = "ordered_hashmap"
 version = "0.0.1"
 authors = ["Ameer Hamza <r3alst@gmail.com>"]
 categories = ["hashmap", "dsa"]
