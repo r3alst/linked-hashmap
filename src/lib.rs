@@ -1,27 +1,28 @@
 use std::collections::HashMap;
 use std::hash::Hash;
-use std::collections::hash_map::Entry as StdEntry;
+use std::marker::PhantomData;
+use std::vec::IntoIter;
 
-/// A custom `OrderedHashMap` struct that maintains the order of keys.
+/// A custom `VecHashMap` struct that maintains the order of keys.
 /// It wraps a `Vec` to store keys and a `HashMap` to store key-value pairs.
 #[derive(Clone, Debug, PartialEq)]
-pub struct OrderedHashMap<K: Eq +  Hash + Clone, V> {
-  pub keys: Vec<K>,
-  pub map: HashMap<K, V>,
+pub struct VecHashMap<K: Eq + Hash + Clone, V> {
+  pub values: Vec<(K, V)>,
+  pub map: HashMap<K, usize>,
 }
 
-impl<K: Eq + Hash + Clone, V> OrderedHashMap<K, V> {
-  /// Creates a new empty `OrderedHashMap`.
+impl<K: Eq + Hash + Clone, V> VecHashMap<K, V> {
+  /// Creates a new empty `VecHashMap`.
   ///
   /// # Examples
   ///
   /// ```
-  /// use ordered_hashmap::OrderedHashMap;
-  /// let ordered_map: OrderedHashMap<String, i32> = OrderedHashMap::new();
+  /// use ordered_hashmap::VecHashMap;
+  /// let ordered_map: VecHashMap<String, i32> = VecHashMap::new();
   /// ```
   pub fn new() -> Self {
-    OrderedHashMap {
-      keys: Vec::new(),
+    VecHashMap {
+      values: Vec::new(),
       map: HashMap::new(),
     }
   }
@@ -31,8 +32,8 @@ impl<K: Eq + Hash + Clone, V> OrderedHashMap<K, V> {
   /// # Examples
   ///
   /// ```
-  /// use ordered_hashmap::OrderedHashMap;
-  /// let mut ordered_map = OrderedHashMap::new();
+  /// use ordered_hashmap::VecHashMap;
+  /// let mut ordered_map = VecHashMap::new();
   /// ordered_map.insert("key1".to_string(), 42);
   /// assert!(ordered_map.contains_key(&"key1".to_string()));
   /// ```
@@ -46,16 +47,21 @@ impl<K: Eq + Hash + Clone, V> OrderedHashMap<K, V> {
   /// # Examples
   ///
   /// ```
-  /// use ordered_hashmap::OrderedHashMap;
-  /// let mut ordered_map = OrderedHashMap::new();
-  /// assert_eq!(ordered_map.insert("key1".to_string(), 42), None);
-  /// assert_eq!(ordered_map.insert("key1".to_string(), 99), Some(42));
+  /// use ordered_hashmap::VecHashMap;
+  /// let mut ordered_map = VecHashMap::new();
+  /// ordered_map.insert("key1".to_string(), 99);
+  /// assert_eq!(ordered_map.get(&"key1".to_string()), Some(&99));
   /// ```
-  pub fn insert(&mut self, key: K, value: V) -> Option<V> {
+  pub fn insert(&mut self, key: K, value: V) {
     if !self.map.contains_key(&key) {
-      self.keys.push(key.clone());
+      let idx = self.values.len();
+      self.values.push((key.clone(), value));
+      self.map.insert(key, idx);
+      return;
     }
-    self.map.insert(key, value)
+
+    let idx = self.map.get(&key).unwrap();
+    self.values[*idx] = (key, value);
   }
 
   /// Removes a key from the map, returning the value at the key if the key was previously in the map.
@@ -63,14 +69,23 @@ impl<K: Eq + Hash + Clone, V> OrderedHashMap<K, V> {
   /// # Examples
   ///
   /// ```
-  /// use ordered_hashmap::OrderedHashMap;
-  /// let mut ordered_map = OrderedHashMap::new();
+  /// use ordered_hashmap::VecHashMap;
+  /// let mut ordered_map = VecHashMap::new();
   /// ordered_map.insert("key1".to_string(), 42);
   /// assert_eq!(ordered_map.remove(&"key1".to_string()), Some(42));
   /// ```
   pub fn remove(&mut self, key: &K) -> Option<V> {
-    self.keys.retain(|k| k != key);
-    self.map.remove(key)
+    if let Some(idx) = self.map.remove(&key) {
+      let (_, v) = self.values.remove(idx);
+      // Shifting Indices to left
+      for (_, cidx) in self.map.iter_mut() {
+        if *cidx > idx {
+          *cidx -= 1
+        }
+      }
+      return Some(v);
+    }
+    None
   }
 
   /// Gets the value of the specified key.
@@ -78,13 +93,17 @@ impl<K: Eq + Hash + Clone, V> OrderedHashMap<K, V> {
   /// # Examples
   ///
   /// ```
-  /// use ordered_hashmap::OrderedHashMap;
-  /// let mut ordered_map = OrderedHashMap::new();
+  /// use ordered_hashmap::VecHashMap;
+  /// let mut ordered_map = VecHashMap::new();
   /// ordered_map.insert("key1".to_string(), 42);
   /// assert_eq!(ordered_map.get(&"key1".to_string()), Some(&42));
   /// ```
   pub fn get(&self, key: &K) -> Option<&V> {
-    self.map.get(key)
+    if let Some(idx) = self.map.get(key) {
+      return Some(&self.values[*idx].1);
+    }
+
+    None
   }
 
   /// Gets a mutable reference to the value of the specified key.
@@ -93,14 +112,21 @@ impl<K: Eq + Hash + Clone, V> OrderedHashMap<K, V> {
   /// # Examples
   ///
   /// ```
-  /// use ordered_hashmap::OrderedHashMap;
-  /// let mut ordered_map = OrderedHashMap::new();
+  /// use ordered_hashmap::VecHashMap;
+  /// let mut ordered_map = VecHashMap::new();
   /// ordered_map.insert("key1".to_string(), 42);
   /// *ordered_map.get_mut(&"key1".to_string()).unwrap() += 1;
   /// assert_eq!(ordered_map.get(&"key1".to_string()), Some(&43));
   /// ```
   pub fn get_mut(&mut self, key: &K) -> Option<&mut V> {
-    self.map.get_mut(key)
+    if let Some(idx) = self.map.get(key) {
+      if let Some(val) = self.values.get_mut(*idx) {
+        return Some(&mut val.1);
+      }
+      return None;
+    }
+
+    None
   }
 
   /// Returns an iterator over the values in the ordered hash map.
@@ -108,15 +134,18 @@ impl<K: Eq + Hash + Clone, V> OrderedHashMap<K, V> {
   /// # Examples
   ///
   /// ```
-  /// use ordered_hashmap::OrderedHashMap;
-  /// let mut ordered_map = OrderedHashMap::new();
+  /// use ordered_hashmap::VecHashMap;
+  /// let mut ordered_map = VecHashMap::new();
   /// ordered_map.insert("key1".to_string(), 42);
   /// ordered_map.insert("key2".to_string(), 24);
   /// let values: Vec<_> = ordered_map.values().collect();
   /// assert_eq!(values, vec![&42, &24]);
   /// ```
-  pub fn values(&self) -> impl Iterator<Item = &V> {
-    self.keys.iter().filter_map(|k| self.map.get(k))
+  pub fn values(&self) -> impl Iterator<Item=&V> {
+    return VecHashMapValuesIter {
+      index: 0,
+      vec: &self.values,
+    };
   }
 
   /// Returns a mutable iterator over the values in the ordered hash map.
@@ -124,17 +153,20 @@ impl<K: Eq + Hash + Clone, V> OrderedHashMap<K, V> {
   /// # Examples
   ///
   /// ```
-  /// use ordered_hashmap::OrderedHashMap;
-  /// let mut ordered_map = OrderedHashMap::new();
+  /// use ordered_hashmap::VecHashMap;
+  /// let mut ordered_map = VecHashMap::new();
   /// ordered_map.insert("key1".to_string(), 42);
   /// ordered_map.insert("key2".to_string(), 24);
   /// ordered_map.values_mut().for_each(|value| *value += 1);
   /// assert_eq!(ordered_map.get(&"key1".to_string()), Some(&43));
   /// assert_eq!(ordered_map.get(&"key2".to_string()), Some(&25));
   /// ```
-  pub fn values_mut(&mut self) -> impl Iterator<Item = &mut V> {
-    let map_ptr = &mut self.map as *mut HashMap<K, V>;
-    self.keys.iter().filter_map(move |k| unsafe { (*map_ptr).get_mut(k) })
+  pub fn values_mut(&mut self) -> impl Iterator<Item=&mut V> {
+    return VecHashMapValuesMutIter {
+      index: 0,
+      vec: &mut self.values as *mut Vec<(K, V)>,
+      _marker: PhantomData,
+    };
   }
 
   /// Returns an iterator over the keys in the ordered hash map.
@@ -142,15 +174,18 @@ impl<K: Eq + Hash + Clone, V> OrderedHashMap<K, V> {
   /// # Examples
   ///
   /// ```
-  /// use ordered_hashmap::OrderedHashMap;
-  /// let mut ordered_map = OrderedHashMap::new();
+  /// use ordered_hashmap::VecHashMap;
+  /// let mut ordered_map = VecHashMap::new();
   /// ordered_map.insert("key1".to_string(), 42);
   /// ordered_map.insert("key2".to_string(), 24);
   /// let keys: Vec<_> = ordered_map.keys().collect();
   /// assert_eq!(keys, vec![&"key1".to_string(), &"key2".to_string()]);
   /// ```
-  pub fn keys(&self) -> impl Iterator<Item = &K> {
-    self.keys.iter()
+  pub fn keys(&self) -> impl Iterator<Item=&K> {
+    return VecHashMapKeysIter {
+      index: 0,
+      vec: &self.values,
+    };
   }
 
   /// Returns an iterator over the key-value pairs in the ordered hash map.
@@ -158,93 +193,85 @@ impl<K: Eq + Hash + Clone, V> OrderedHashMap<K, V> {
   /// # Examples
   ///
   /// ```
-  /// use ordered_hashmap::OrderedHashMap;
-  /// let mut ordered_map = OrderedHashMap::new();
+  /// use ordered_hashmap::VecHashMap;
+  /// let mut ordered_map = VecHashMap::new();
   /// ordered_map.insert("key1".to_string(), 42);
   /// ordered_map.insert("key2".to_string(), 24);
   /// let pairs: Vec<_> = ordered_map.iter().collect();
-  /// assert_eq!(pairs, vec![(&"key1".to_string(), &42), (&"key2".to_string(), &24)]);
+  /// assert_eq!(pairs, vec![&("key1".to_string(), 42), &("key2".to_string(), 24)]);
   /// ```
-  pub fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
-    self.keys.iter().filter_map(move |k| self.map.get(k).map(|v| (k, v)))
+  pub fn iter(&self) -> impl Iterator<Item=&(K, V)> {
+    self.values.iter()
   }
 
-  /// Returns an `Entry` for the given key, allowing for more complex manipulation of the stored values.
+  /// Returns an into iterator of the key-value pairs in the map, in the order corresponding to their keys.
   ///
   /// # Examples
   ///
   /// ```
-  /// use ordered_hashmap::OrderedHashMap;
-  /// let mut ordered_map = OrderedHashMap::new();
+  /// use ordered_hashmap::VecHashMap;
+  /// let mut ordered_map = VecHashMap::new();
   /// ordered_map.insert("key1".to_string(), 42);
-  /// ordered_map.entry("key1".to_string()).or_insert(99);
-  /// assert_eq!(ordered_map.get(&"key1".to_string()), Some(&42));
+  /// ordered_map.insert("key2".to_string(), 24);
+  /// let pairs: Vec<_> = ordered_map.iter().collect();
+  /// assert_eq!(pairs, vec![&("key1".to_string(), 42), &("key2".to_string(), 24)]);
   /// ```
-  pub fn entry(&mut self, key: K) -> Entry<K, V> {
-    match self.map.entry(key.clone()) {
-      StdEntry::Occupied(occupied) => Entry::Occupied(occupied),
-      StdEntry::Vacant(vacant) => {
-        self.keys.push(key.clone());
-        Entry::Vacant(vacant)
-      }
-    }
+  pub fn into_iter(self) -> IntoIter<(K, V)> {
+    self.values.into_iter()
   }
+
 
   /// Returns a mutable iterator over the key-value pairs in the ordered hash map.
   ///
   /// # Examples
   ///
   /// ```
-  /// use ordered_hashmap::OrderedHashMap;
-  /// let mut ordered_map = OrderedHashMap::new();
+  /// use ordered_hashmap::VecHashMap;
+  /// let mut ordered_map = VecHashMap::new();
   /// ordered_map.insert("key1".to_string(), 42);
   /// ordered_map.insert("key2".to_string(), 24);
   /// ordered_map.iter_mut().for_each(|(key, value)| *value += 1);
   /// assert_eq!(ordered_map.get(&"key1".to_string()), Some(&43));
   /// assert_eq!(ordered_map.get(&"key2".to_string()), Some(&25));
   /// ```
-  pub fn iter_mut(&mut self) -> impl Iterator<Item = (&K, &mut V)> {
-    let map_ptr = &mut self.map as *mut HashMap<K, V>;
-    self.keys.iter().filter_map(move |k| unsafe { (*map_ptr).get_mut(k).map(|v| (k, v)) })
+  pub fn iter_mut(&mut self) -> impl Iterator<Item=&mut (K, V)> {
+    self.values.iter_mut()
   }
+
 
   /// Returns a vector of the values in the map, in the order corresponding to their keys.
   ///
   /// # Examples
   ///
   /// ```
-  /// use ordered_hashmap::OrderedHashMap;
+  /// use ordered_hashmap::VecHashMap;
   ///
-  /// let mut map = OrderedHashMap::new();
+  /// let mut map = VecHashMap::new();
   /// map.insert(1, "one");
   /// map.insert(2, "two");
   /// map.insert(3, "three");
   ///
-  /// let values = map.into_values();
+  /// let values: Vec<_> = map.into_values().collect();
   /// assert_eq!(values, vec!["one", "two", "three"]);
   /// ```
-  pub fn into_values(self) -> Vec<V> {
-    let mut extracted_items: Vec<(K, V)> = self.map.into_iter().collect();
-    self.keys.into_iter().filter_map(move |k| {
-      if let Some(index) = extracted_items.iter().position(|(key, _)| *key == k) {
-        Some(extracted_items.remove(index).1)
-      } else {
-        None
-      }
-    }).collect::<Vec<_>>()
+  pub fn into_values(self) -> VecHashMapIntoValuesIter<K, V> {
+    VecHashMapIntoValuesIter {
+      vec: self.values.into_iter()
+    }
   }
 
-  /// Adds all key-value pairs from another `OrderedHashMap` to this one, without replacing any existing pairs.
+
+  /// Adds all key-value pairs from another `VecHashMap` to this one, without replacing any existing pairs.
   ///
   /// # Examples
   ///
   /// ```
-  /// use ordered_hashmap::OrderedHashMap;
+  /// use ordered_hashmap::VecHashMap;
   ///
-  /// let mut map1 = OrderedHashMap::new();
+  /// let mut map1 = VecHashMap::new();
   /// map1.insert(1, "one");
   ///
-  /// let mut map2 = OrderedHashMap::new();
+  /// let mut map2 = VecHashMap::new();
   /// map2.insert(2, "two");
   ///
   /// map1.extend(map2);
@@ -252,24 +279,27 @@ impl<K: Eq + Hash + Clone, V> OrderedHashMap<K, V> {
   /// assert_eq!(map1.get(&1), Some(&"one"));
   /// assert_eq!(map1.get(&2), Some(&"two"));
   /// ```
-  pub fn extend(&mut self, slice: OrderedHashMap<K, V>) {
-    slice.keys.into_iter().for_each(|k| {
-      if !self.keys.contains(&k) {
-        self.keys.push(k);
+  pub fn extend(&mut self, slice: VecHashMap<K, V>) {
+    slice.values.into_iter().for_each(|k| {
+      if !self.map.contains_key(&k.0) {
+        let idx = self.values.len();
+        self.map.insert(k.0.clone(), idx.clone());
+        self.values.push(k);
+      } else {
+        let idx = self.map[&k.0];
+        self.values[idx] = k;
       }
     });
-    self.map.extend(slice.map);
   }
-
 
   /// Returns the number of key-value pairs in the map.
   ///
   /// # Examples
   ///
   /// ```
-  /// use ordered_hashmap::OrderedHashMap;
+  /// use ordered_hashmap::VecHashMap;
   ///
-  /// let mut map = OrderedHashMap::new();
+  /// let mut map = VecHashMap::new();
   /// assert_eq!(map.len(), 0);
   ///
   /// map.insert(1, "one");
@@ -279,46 +309,84 @@ impl<K: Eq + Hash + Clone, V> OrderedHashMap<K, V> {
   /// assert_eq!(map.len(), 2);
   /// ```
   pub fn len(&self) -> usize {
-    self.map.len()
+    self.values.len()
   }
 }
 
-pub enum Entry<'a, K: 'a, V: 'a> {
-  Occupied(std::collections::hash_map::OccupiedEntry<'a, K, V>),
-  Vacant(std::collections::hash_map::VacantEntry<'a, K, V>),
+pub struct VecHashMapIntoValuesIter<K: Eq + Hash + Clone, V> {
+  vec: IntoIter<(K, V)>,
 }
 
-impl<'a, K: Eq + Hash, V> Entry<'a, K, V> {
-  pub fn or_insert(self, default: V) -> &'a mut V {
-    match self {
-      Entry::Occupied(occupied) => occupied.into_mut(),
-      Entry::Vacant(vacant) => vacant.insert(default),
+impl<K: Eq + Hash + Clone, V> Iterator for VecHashMapIntoValuesIter<K, V> {
+  type Item = V;
+
+  fn next(&mut self) -> Option<Self::Item> {
+    if let Some(val) = self.vec.next() {
+      return Some(val.1);
     }
-  }
 
-  pub fn or_insert_with<F: FnOnce() -> V>(self, default: F) -> &'a mut V {
-    match self {
-      Entry::Occupied(occupied) => occupied.into_mut(),
-      Entry::Vacant(vacant) => vacant.insert(default()),
-    }
+    None
   }
 }
 
-impl<K: Eq + Hash + Clone, V> IntoIterator for OrderedHashMap<K, V> {
-  type Item = (K, V);
-  type IntoIter = std::vec::IntoIter<Self::Item>;
+pub struct VecHashMapKeysIter<'a, K: Eq + Hash + Clone, V> {
+  index: usize,
+  vec: &'a Vec<(K, V)>,
+}
 
-  fn into_iter(self) -> Self::IntoIter {
-    let mut extracted_items: Vec<(K, V)> = self.map.into_iter().collect();
-    self.keys.into_iter()
-      .filter_map(move |k| {
-        if let Some(index) = extracted_items.iter().position(|(key, _)| *key == k) {
-          Some(extracted_items.remove(index))
-        } else {
-          None
+impl<'a, K: Eq + Hash + Clone, V> Iterator for VecHashMapKeysIter<'a, K, V> {
+  type Item = &'a K;
+
+  fn next(&mut self) -> Option<Self::Item> {
+    if self.index < self.vec.len() {
+      let item = Some(&self.vec[self.index].0);
+      self.index += 1;
+      return item;
+    }
+
+    None
+  }
+}
+
+pub struct VecHashMapValuesIter<'a, K: Eq + Hash + Clone, V> {
+  index: usize,
+  vec: &'a Vec<(K, V)>,
+}
+
+impl<'a, K: Eq + Hash + Clone, V> Iterator for VecHashMapValuesIter<'a, K, V> {
+  type Item = &'a V;
+
+  fn next(&mut self) -> Option<Self::Item> {
+    if self.index < self.vec.len() {
+      let item = Some(&self.vec[self.index].1);
+      self.index += 1;
+      return item;
+    }
+
+    None
+  }
+}
+
+pub struct VecHashMapValuesMutIter<'a, K: Eq + Hash + Clone, V> {
+  index: usize,
+  vec: *mut Vec<(K, V)>,
+  _marker: PhantomData<&'a mut Vec<(K, V)>>,
+}
+
+impl<'a, K: Eq + Hash + Clone, V: 'a> Iterator for VecHashMapValuesMutIter<'a, K, V> {
+  type Item = &'a mut V;
+
+  fn next(&mut self) -> Option<Self::Item> {
+    unsafe {
+      if self.index < (*self.vec).len() {
+        if let Some(val) = (*self.vec).get_mut(self.index) {
+          let item = Some(&mut val.1);
+          self.index += 1;
+          return item;
         }
-      })
-      .collect::<Vec<_>>()
-      .into_iter()
+      }
+    }
+
+    None
   }
 }
