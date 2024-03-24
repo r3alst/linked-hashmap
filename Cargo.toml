@@ -1,6 +1,6 @@
 [package]
 name = "ordered_hashmap"
-version = "0.0.3"
+version = "0.0.4"
 authors = ["Ameer Hamza <r3alst@gmail.com>"]
 categories = ["hashmap", "dsa"]
 description = "Ordered Hashmap implementation to overcome arbitrary order of key-values problem in Rust"
